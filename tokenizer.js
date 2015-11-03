@@ -9,7 +9,9 @@ function sign(str) {
   var hasher = crypto.createHash('sha256');
   hasher.update(signing_key);
   hasher.update(str);
-  return hasher.digest('base64').slice(0, SHORT_SIG_LENGTH);
+  return hasher.digest('base64').slice(0, SHORT_SIG_LENGTH)
+    .replace(/\+/g, '-')
+    .replace(/\//g, '_');
 }
   
 function timestamp() {

@@ -3,7 +3,7 @@ var tokenizer = require('./tokenizer');
 var logger = require('bunyan').createLogger({name: 'civid-bot'});
 
 var AFK_MS = 30000; // Do something to keep the bot connected every 30s
-var LOGIN_PAGE = 'http://civid.local:5000/in/';
+var LOGIN_PAGE = 'http://id.civlabs.com/in/';
 
 var signing_key = process.env.SIGNING_KEY;
 
