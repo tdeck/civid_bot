@@ -1,16 +1,21 @@
 var mineflayer = require('mineflayer');
-var tokenizer = require('./tokenizer');
+var Tokenizer = require('./tokenizer');
 var logger = require('bunyan').createLogger({name: 'civid-bot'});
 
 var AFK_MS = 30000; // Do something to keep the bot connected every 30s
 var LOGIN_PAGE = 'http://id.civlabs.com/in/';
 
 var signing_key = process.env.SIGNING_KEY;
+var mc_user = process.env.MC_USER;
+var mc_pass = process.env.MC_PASS;
+if (!signing_key || !mc_user || !mc_pass) throw new Error('Missing config');
+
+var tokenizer = new Tokenizer(signing_key);
 
 var bot = mineflayer.createBot({
   host: 'mc.civcraft.co',
-  username: process.env.MC_USER,
-  password: process.env.MC_PASS,
+  username: mc_user,
+  password: mc_pass,
 });
 
 var spawned = false;
@@ -41,6 +46,14 @@ bot.on('message', function(rawMsg) {
     var message = match[2];
     handlePM(username, message);
   }
+});
+
+bot.on('kicked', function(reason) {
+  logger.info('Kicked:', reason);
+});
+
+bot.on('end', function() {
+  logger.info('Connection end');
 });
 
 function handlePM(username, message) {
