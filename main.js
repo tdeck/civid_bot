@@ -1,6 +1,8 @@
-var mineflayer = require('mineflayer');
-var Tokenizer = require('./tokenizer');
-var logger = require('bunyan').createLogger({name: 'civid-bot'});
+var mineflayer = require('mineflayer'),
+  Tokenizer = require('./tokenizer'),
+  logger = require('bunyan').createLogger({name: 'civid-bot'}),
+  express = require('express')
+  app = express();
 
 var AFK_MS = 30000; // Do something to keep the bot connected every 30s
 var LOGIN_PAGE = 'http://id.civlabs.com/in/';
@@ -31,10 +33,12 @@ bot.on('chat', function(msg) {
   console.log('Chat:', message);
 });
 
+var lastMessage;
 bot.on('message', function(rawMsg) {
   if (rawMsg.extra.length != 1) return;
   var extra = rawMsg.extra[0];
 
+  lastMessage = Date.now();
   logger.info('Message:', rawMsg);
 
   var match;
@@ -66,6 +70,7 @@ function handlePM(username, message) {
   }
 }
 
+var lastKeepAlive;
 function keepBusy() {
   // Click a slot in the bot's inventory to keep it "active" according to AFKGC
   // Events that will keep the player from being kicked are listed here:
@@ -75,6 +80,15 @@ function keepBusy() {
     logger.info('Sending an inventory click.');
     bot.clickWindow(0, 0, 0, function(err) {
       if (err) throw err;
+      lastKeepAlive = Date.now();
     });
   }, AFK_MS);
 }
+
+app.get('/_status', function(req, res) {
+  return res.json({
+    last_message: lastMessage,
+    last_keep_alive: lastKeepAlive,
+  });
+});
+app.listen(6869);
