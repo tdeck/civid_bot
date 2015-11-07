@@ -8,10 +8,11 @@ function timestamp() {
 }
 
 var Tokenizer = function(signing_key) {
-  this.signing_key = process.env.SIGNING_KEY;
+  this.signing_key = signing_key;
 };
 
 Tokenizer.prototype.tokenize = function(username) {
+  console.log(new Date());
   return this._sign(username + timestamp()) + username;
 };
 
