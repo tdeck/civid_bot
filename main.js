@@ -33,13 +33,11 @@ bot.on('chat', function(msg) {
   console.log('Chat:', message);
 });
 
-var lastMessage;
 bot.on('message', function(rawMsg) {
-  if (rawMsg.extra.length != 1) return;
-  var extra = rawMsg.extra[0];
+  logTracked('message', 'Message:', rawMsg);
 
-  lastMessage = Date.now();
-  logger.info('Message:', rawMsg);
+  if (!rawMsg.extra || rawMsg.extra.length != 1) return;
+  var extra = rawMsg.extra[0];
 
   var match;
   if (
@@ -70,25 +68,37 @@ function handlePM(username, message) {
   }
 }
 
-var lastKeepAlive;
 function keepBusy() {
   // Click a slot in the bot's inventory to keep it "active" according to AFKGC
   // Events that will keep the player from being kicked are listed here:
   // https://github.com/Kraken3/AFK-Player-GC/blob/master/src/com/github/Kraken3/AFKPGC/EventHandlers.java
-  logger.info('Starting keepBusy().');
   setInterval(function() {
-    logger.info('Sending an inventory click.');
     bot.clickWindow(0, 0, 0, function(err) {
       if (err) throw err;
-      lastKeepAlive = Date.now();
+      logTracked('keep_alive', 'Sent an inventory click');
     });
   }, AFK_MS);
 }
 
+// This both to logger.info and keeps track of the last time we saw an
+// event in its category. We use these for the _status endpoint.
+var trackedEvents = {};
+function logTracked(name /*, ...info */) {
+  var info = Array.prototype.slice.call(arguments);
+  info.shift();
+  logger.info.apply(logger, info);
+  trackedEvents['last_' + name] = Date.now();
+}
+
+// For each tracked event, reports last_xxx timestamp and last_xxx_lag_seconds 
 app.get('/_status', function(req, res) {
-  return res.json({
-    last_message: lastMessage,
-    last_keep_alive: lastKeepAlive,
-  });
+  var statusMsg = {};
+  var now = Date.now();
+  for (var key in trackedEvents) {
+    var timestamp = trackedEvents[key];
+    statusMsg[key] = timestamp;
+    statusMsg[key + '_lag_seconds'] = (now - timestamp) / 1000;
+  }
+  return res.json(statusMsg);
 });
 app.listen(process.env.PORT || 5000);
