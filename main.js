@@ -5,6 +5,7 @@ var mineflayer = require('mineflayer'),
   app = express();
 
 var AFK_MS = 30000; // Do something to keep the bot connected every 30s
+var RECONNECT_MS = 60000; // Reconnect after 60 seconds when connection ends
 var LOGIN_PAGE = 'http://id.civlabs.com/in/';
 
 var signing_key = process.env.SIGNING_KEY;
@@ -13,24 +14,26 @@ var mc_pass = process.env.MC_PASS;
 if (!signing_key || !mc_user || !mc_pass) throw new Error('Missing config');
 
 var tokenizer = new Tokenizer(signing_key);
-
-var bot = mineflayer.createBot({
+var botConfig = {
   host: 'mc.civcraft.co',
   username: mc_user,
   password: mc_pass,
-});
+};
+
+var bot = mineflayer.createBot(botConfig);
 
 var spawned = false;
+bot.on('connect', function() {
+  logger.info('Connected');
+  spawned = false; // Want to reset this if we reconnect
+});
+
 bot.on('spawn', function() {
   // This will also be called on death->respawn events, which we want to ignore
   logger.info('Spawned');
   if (spawned) return;
   spawned = true;
   keepBusy();
-});
-
-bot.on('chat', function(msg) {
-  console.log('Chat:', message);
 });
 
 bot.on('message', function(rawMsg) {
@@ -51,11 +54,21 @@ bot.on('message', function(rawMsg) {
 });
 
 bot.on('kicked', function(reason) {
-  logger.info('Kicked:', reason);
+  logger.error('Kicked:', reason);
 });
 
 bot.on('end', function() {
-  logger.info('Connection end');
+  logger.error('Connection end');
+  stopKeepingBusy();
+
+  setTimeout(function() {
+    logger.info('Reconnecting');
+    bot.connect(botConfig);
+  }, RECONNECT_MS);
+});
+
+bot.on('error', function(e) {
+  logger.error(e);
 });
 
 function handlePM(username, message) {
@@ -68,16 +81,22 @@ function handlePM(username, message) {
   }
 }
 
+var busyInterval;
 function keepBusy() {
   // Click a slot in the bot's inventory to keep it "active" according to AFKGC
   // Events that will keep the player from being kicked are listed here:
   // https://github.com/Kraken3/AFK-Player-GC/blob/master/src/com/github/Kraken3/AFKPGC/EventHandlers.java
-  setInterval(function() {
+  busyInterval = setInterval(function() {
     bot.clickWindow(0, 0, 0, function(err) {
       if (err) throw err;
       logTracked('keep_alive', 'Sent an inventory click');
     });
   }, AFK_MS);
+}
+
+function stopKeepingBusy() {
+  if (busyInterval) clearInterval(busyInterval);
+  busyInterval = undefined;
 }
 
 // This both to logger.info and keeps track of the last time we saw an
