@@ -59,7 +59,16 @@ bot.on('kicked', function(reason) {
 
 bot.on('end', function() {
   logger.error('Connection end');
+
   stopKeepingBusy();
+
+  // This is pretty terrible. Mineflayer bots aren't really designed for you
+  // to call connect() multiple times; each call causes the bot to construct
+  // a new ._client(), leaking the old one with all its attached emitters and
+  // creating a new one. In order to avoid these leaks, we need to clear the
+  // events from the old client before we cause the bot to make a new one.
+  bot.end();
+  bot._client.removeAllListeners();
 
   setTimeout(function() {
     logger.info('Reconnecting');
