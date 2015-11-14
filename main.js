@@ -53,6 +53,10 @@ bot.on('message', function(rawMsg) {
   }
 });
 
+bot.on('death', function(info) {
+  logger.error('Died:', info);
+});
+
 bot.on('kicked', function(reason) {
   logger.error('Kicked:', reason);
 });
@@ -86,7 +90,7 @@ function handlePM(username, message) {
     bot.whisper(username, LOGIN_PAGE + tokenizer.tokenize(username));
     bot.whisper(username, "(it's good for 60 seconds)");
   } else {
-    bot.whisper(username, "I won't dignify that with a response.");
+    bot.whisper(username, "I'm sorry, I haven't a clue what you mean by that.");
   }
 }
 
