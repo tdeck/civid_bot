@@ -5,8 +5,9 @@ var mineflayer = require('mineflayer'),
   app = express();
 
 var AFK_MS = 30000; // Do something to keep the bot connected every 30s
+var CHAT_DELAY_MS = 200;
 var RECONNECT_MS = 60000; // Reconnect after 60 seconds when connection ends
-var LOGIN_PAGE = 'http://id.civlabs.com/in/';
+var LOGIN_PAGE = 'https://id.civlabs.com/in/';
 
 var signing_key = process.env.SIGNING_KEY;
 var mc_user = process.env.MC_USER;
@@ -20,86 +21,110 @@ var botConfig = {
   password: mc_pass,
 };
 
-var bot = mineflayer.createBot(botConfig);
-
-var spawned = false;
-bot.on('connect', function() {
-  logger.info('Connected');
-  spawned = false; // Want to reset this if we reconnect
-});
-
-bot.on('spawn', function() {
-  // This will also be called on death->respawn events, which we want to ignore
-  logger.info('Spawned');
-  if (spawned) return;
-  spawned = true;
-  keepBusy();
-});
-
-bot.on('message', function(rawMsg) {
-  logTracked('message', 'Message:', rawMsg);
-
-  if (!rawMsg.extra || rawMsg.extra.length != 1) return;
-  var extra = rawMsg.extra[0];
-
-  var match;
-  if (
-    extra.color === 'light_purple' &&
-    (match = extra.text.match(/^From ([\w_]+?): (.+)$/))
-  ) {
-    var username = match[1];
-    var message = match[2];
-    handlePM(username, message);
+var bot;
+function connectAndStart() {
+  if (bot) {
+    // Let's be extra paranoid about not leaking memory by making
+    // a new bot each time and ensuring the old one has released
+    // all its listeners
+    bot.end();
+    bot._client.removeAllListeners();
+    bot.removeAllListeners();
   }
-});
 
-bot.on('death', function(info) {
-  logger.error('Died:', info);
-});
+  bot = mineflayer.createBot(botConfig);
 
-bot.on('kicked', function(reason) {
-  logger.error('Kicked:', reason);
-});
+  bot.on('connect', function() {
+    logger.info('Connected');
+  });
 
-bot.on('end', function() {
-  logger.error('Connection end');
+  var spawned = false;
+  bot.on('spawn', function() {
+    // This will also be called on death->respawn events, which we want to ignore
+    logger.info('Spawned');
+    if (spawned) return;
+    spawned = true;
+    keepBusy();
+  });
 
-  stopKeepingBusy();
+  bot.on('message', function(rawMsg) {
+    logTracked('message', 'Message:', rawMsg);
 
-  // This is pretty terrible. Mineflayer bots aren't really designed for you
-  // to call connect() multiple times; each call causes the bot to construct
-  // a new ._client(), leaking the old one with all its attached emitters and
-  // creating a new one. In order to avoid these leaks, we need to clear the
-  // events from the old client before we cause the bot to make a new one.
-  bot.end();
-  bot._client.removeAllListeners();
+    if (!rawMsg.extra || rawMsg.extra.length != 1) return;
+    var extra = rawMsg.extra[0];
 
-  setTimeout(function() {
-    logger.info('Reconnecting');
-    bot.connect(botConfig);
-  }, RECONNECT_MS);
-});
+    var match;
+    if (
+      extra.color === 'light_purple' &&
+      (match = extra.text.match(/^From ([\w_]+?): (.+)$/))
+    ) {
+      var username = match[1];
+      var message = match[2];
+      handlePM(username, message);
+    }
+  });
 
-bot.on('error', function(e) {
-  logger.error(e);
-});
+  bot.on('death', function(info) {
+    logger.error('Died:', info);
+  });
 
+  bot.on('kicked', function(reason) {
+    logger.error('Kicked:', reason);
+  });
+
+  bot.on('end', function() {
+    logger.error('Connection end');
+
+    stopKeepingBusy();
+
+    setTimeout(function() {
+      logger.info('Reconnecting');
+      connectAndStart();
+    }, RECONNECT_MS);
+  });
+
+  bot.on('error', function(e) {
+    logger.error(e);
+  });
+}
+
+connectAndStart();
+
+var apprisedPlayers = {};
 function handlePM(username, message) {
   if (message.trim().toLowerCase() == 'id') {
-    bot.whisper(username, "Your one-time login link:");
-    bot.whisper(username, LOGIN_PAGE + tokenizer.tokenize(username));
-    bot.whisper(username, "(it's good for 60 seconds)");
+    whisper(username, "Your one-time login link: " + LOGIN_PAGE + tokenizer.tokenize(username));
+    whisper(username, "(it's good for 60 seconds)");
   } else {
-    bot.whisper(username, "I'm sorry, I haven't a clue what you mean by that.");
+    whisper(username, "I'm sorry, I haven't a clue what you mean by that.");
+    if (!apprisedPlayers[username]) {
+      whisper(username, 'This bot provides a simple Civcraft-based login');
+      whisper(username, 'system for web applications. If you are a');
+      whisper(username, 'developer, you might like to learn more at');
+      whisper(username, 'https://id.civlabs.com.');
+      apprisedPlayers[username] = true;
+    }
   }
 }
+
+var whisperQueue = [];
+function whisper(user, message) {
+  whisperQueue.push([user, message]);
+}
+function sendOutgoingWhispers() {
+  if (whisperQueue.length > 0) {
+    var pair = whisperQueue.shift();
+    bot.whisper(pair[0], pair[1]);
+  }
+}
+setInterval(sendOutgoingWhispers, CHAT_DELAY_MS);
 
 var busyInterval;
 function keepBusy() {
   // Click a slot in the bot's inventory to keep it "active" according to AFKGC
   // Events that will keep the player from being kicked are listed here:
   // https://github.com/Kraken3/AFK-Player-GC/blob/master/src/com/github/Kraken3/AFKPGC/EventHandlers.java
-  busyInterval = setInterval(function() {
+  busyInterval = busyInterval || setInterval(function() {
     bot.clickWindow(0, 0, 0, function(err) {
       if (err) throw err;
       logTracked('keep_alive', 'Sent an inventory click');
