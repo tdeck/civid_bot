@@ -96,8 +96,9 @@ function handlePM(username, message) {
     whisper(username, 'Your one-time login link, good for 60 seconds:');
     whisper(username, LOGIN_PAGE + tokenizer.tokenize(username));
   } else {
-    whisper(username, "I'm sorry, I haven't a clue what you mean by that.");
-    if (!apprisedPlayers[username]) {
+    if (apprisedPlayers[username]) {
+      whisper(username, "I only know the id command.");
+    } else {
       whisper(username, 'This bot provides a simple Civcraft-based login');
       whisper(username, 'system for web applications. If you are a');
       whisper(username, 'developer, you might like to learn more at');
