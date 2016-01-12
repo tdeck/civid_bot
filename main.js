@@ -5,7 +5,7 @@ var mineflayer = require('mineflayer'),
   app = express();
 
 var AFK_MS = 30000; // Do something to keep the bot connected every 30s
-var CHAT_DELAY_MS = 200;
+var CHAT_DELAY_MS = 700;
 var RECONNECT_MS = 60000; // Reconnect after 60 seconds when connection ends
 var LOGIN_PAGE = 'https://id.civlabs.com/in/';
 
@@ -93,8 +93,8 @@ connectAndStart();
 var apprisedPlayers = {};
 function handlePM(username, message) {
   if (message.trim().toLowerCase() == 'id') {
-    whisper(username, "Your one-time login link: " + LOGIN_PAGE + tokenizer.tokenize(username));
-    whisper(username, "(it's good for 60 seconds)");
+    whisper(username, 'Your one-time login link, good for 60 seconds:');
+    whisper(username, LOGIN_PAGE + tokenizer.tokenize(username));
   } else {
     whisper(username, "I'm sorry, I haven't a clue what you mean by that.");
     if (!apprisedPlayers[username]) {
@@ -107,17 +107,21 @@ function handlePM(username, message) {
   }
 }
 
-var whisperQueue = [];
 function whisper(user, message) {
   whisperQueue.push([user, message]);
 }
+
+
+var whisperQueue = [];
+var nextChat = 0;
 function sendOutgoingWhispers() {
-  if (whisperQueue.length > 0) {
+  if (nextChat <= Date.now() && whisperQueue.length > 0) {
     var pair = whisperQueue.shift();
     bot.whisper(pair[0], pair[1]);
+    nextChat = Date.now() + CHAT_DELAY_MS;
   }
 }
-setInterval(sendOutgoingWhispers, CHAT_DELAY_MS);
+setInterval(sendOutgoingWhispers, 100);
 
 var busyInterval;
 function keepBusy() {
